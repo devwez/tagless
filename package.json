@@ -1,0 +1,15 @@
+{
+  "name": "snake-demo",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "serve": "npx http-server . -p 8080 -a 0.0.0.0 -c-1",
+    "start": "npx http-server . -p 8080 -a 0.0.0.0 -c-1"
+  },
+  "devDependencies": {
+    "http-server": "^14.0.0",
+    "ts-node": "^10.0.0",
+    "typescript": "^5.0.0",
+    "undici-types": "^8.11.2"
+  }
+}

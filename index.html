@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>snake</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #000; height: 100%; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font-family: Arial, Helvetica, sans-serif;
+    min-height: 100vh;
+  }
+  canvas {
+    border: 1px solid #333;
+    max-width: 96vw; max-height: 92vh;
+    touch-action: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="game" width="400" height="400"></canvas>
+<script>
+// plain snake. arrows/wasd or swipe, space pauses.
+var canvas = document.getElementById('game');
+var ctx = canvas.getContext('2d');
+
+var CELL = 20;
+var COLS = canvas.width / CELL;
+var ROWS = canvas.height / CELL;
+
+var state = 'ready'; // ready | play | pause | over
+var snake, dir, pending, apple, score, best, level, eaten;
+
+best = parseInt(localStorage.getItem('tagless-high') || '0', 10);
+if (isNaN(best)) best = 0;
+
+function reset() {
+  snake = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }];
+  dir = { x: 1, y: 0 };
+  pending = { x: 1, y: 0 };
+  score = 0; level = 1; eaten = 0;
+  placeApple();
+}
+
+function placeApple() {
+  while (true) {
+    var ax = Math.floor(Math.random() * COLS);
+    var ay = Math.floor(Math.random() * ROWS);
+    var hit = false;
+    for (var i = 0; i < snake.length; i++) {
+      if (snake[i].x === ax && snake[i].y === ay) { hit = true; break; }
+    }
+    if (!hit) { apple = { x: ax, y: ay }; return; }
+  }
+}
+
+function speed() {
+  var s = 150 - (level - 1) * 10;
+  return s < 70 ? 70 : s;
+}
+
+function step() {
+  dir = pending;
+  var head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+  if (head.x < 0 || head.y < 0 || head.x >= COLS || head.y >= ROWS) return die();
+
+  for (var i = 0; i < snake.length - 1; i++) {
+    if (snake[i].x === head.x && snake[i].y === head.y) return die();
+  }
+
+  snake.unshift(head);
+
+  if (head.x === apple.x && head.y === apple.y) {
+    score++; eaten++;
+    level = Math.floor(eaten / 5) + 1;
+    placeApple();
+  } else {
+    snake.pop();
+  }
+}
+
+function die() {
+  state = 'over';
+  if (score > best) {
+    best = score;
+    localStorage.setItem('tagless-high', String(best));
+  }
+}
+
+function draw() {
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // apple
+  ctx.fillStyle = '#e5484d';
+  ctx.fillRect(apple.x * CELL, apple.y * CELL, CELL, CELL);
+  ctx.font = '18px Arial';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🍎', apple.x * CELL + 10, apple.y * CELL + 11);
+
+  // snake
+  ctx.fillStyle = '#0f0';
+  for (var i = 0; i < snake.length; i++) {
+    ctx.fillRect(snake[i].x * CELL, snake[i].y * CELL, CELL - 1, CELL - 1);
+  }
+
+  // score
+  ctx.fillStyle = '#fff';
+  ctx.font = '15px Arial';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText('score ' + score, 8, 8);
+  ctx.fillText('best ' + best, 8, 28);
+  ctx.textAlign = 'right';
+  ctx.fillText('level ' + level, canvas.width - 8, 8);
+
+  if (state === 'ready') {
+    shadow();
+    big('snake', 150);
+    small('arrows / wasd or swipe', 220);
+    small('space pauses - press space or tap to start', 246);
+  } else if (state === 'pause') {
+    shadow();
+    big('paused', 180);
+    small('space to keep playing', 230);
+  } else if (state === 'over') {
+    shadow();
+    big('game over', 160);
+    small('score ' + score + '   best ' + best, 220);
+    small('space or tap to play again', 250);
+  }
+}
+
+function shadow() {
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function big(t, y) {
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 42px Arial';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(t, canvas.width / 2, y);
+}
+
+function small(t, y) {
+  ctx.fillStyle = '#aaa';
+  ctx.font = '15px Arial';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(t, canvas.width / 2, y);
+}
+
+function start() {
+  reset();
+  state = 'play';
+}
+
+var last = 0, acc = 0;
+function loop(t) {
+  requestAnimationFrame(loop);
+  if (!last) last = t;
+  var dt = t - last;
+  last = t;
+  if (state === 'play') {
+    acc += dt;
+    var iv = speed();
+    while (acc >= iv) { step(); acc -= iv; if (state !== 'play') { acc = 0; break; } }
+  }
+  draw();
+}
+
+function steer(x, y) {
+  if (state !== 'play') return;
+  if (x === -dir.x && y === -dir.y) return;
+  if (x === dir.x && y === dir.y) return;
+  pending = { x: x, y: y };
+}
+
+document.addEventListener('keydown', function (e) {
+  var k = e.key;
+  if (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight' || k === ' ') {
+    e.preventDefault();
+  }
+  if (k === ' ') {
+    if (state === 'play') state = 'pause';
+    else if (state === 'pause') state = 'play';
+    else start();
+    return;
+  }
+  if (k === 'Enter' && state !== 'play') { start(); return; }
+  if (k === 'ArrowUp' || k === 'w' || k === 'W') steer(0, -1);
+  else if (k === 'ArrowDown' || k === 's' || k === 'S') steer(0, 1);
+  else if (k === 'ArrowLeft' || k === 'a' || k === 'A') steer(-1, 0);
+  else if (k === 'ArrowRight' || k === 'd' || k === 'D') steer(1, 0);
+});
+
+var tsx = 0, tsy = 0, tstid = null, tst = 0, moved = false;
+canvas.addEventListener('touchstart', function (e) {
+  e.preventDefault();
+  var t = e.changedTouches[0];
+  tsx = t.clientX; tsy = t.clientY; tstid = t.identifier; tst = Date.now(); moved = false;
+}, { passive: false });
+canvas.addEventListener('touchmove', function (e) {
+  e.preventDefault();
+  for (var i = 0; i < e.changedTouches.length; i++) {
+    var t = e.changedTouches[i];
+    if (t.identifier !== tstid) continue;
+    var dx = t.clientX - tsx, dy = t.clientY - tsy;
+    if (Math.abs(dx) < 24 && Math.abs(dy) < 24) continue;
+    if (Math.abs(dx) > Math.abs(dy)) steer(dx > 0 ? 1 : -1, 0);
+    else steer(0, dy > 0 ? 1 : -1);
+    tsx = t.clientX; tsy = t.clientY; moved = true;
+  }
+}, { passive: false });
+canvas.addEventListener('touchend', function (e) {
+  e.preventDefault();
+  if (!moved && Date.now() - tst < 300) {
+    if (state !== 'play') start();
+    else state = 'pause';
+  }
+  tstid = null;
+}, { passive: false });
+canvas.addEventListener('mousedown', function () {
+  if (state !== 'play') start();
+});
+
+reset();
+state = 'ready';
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
