@@ -29,11 +29,24 @@ var CELL = 20;
 var COLS = canvas.width / CELL;
 var ROWS = canvas.height / CELL;
 
-var state = 'ready'; // ready | play | pause | over
-var snake, dir, pending, apple, score, best, level, eaten;
+var skins = [
+  { name: 'classic', head: '#7dff6a', body: '#00cc00', cost: 0 },
+  { name: 'gold', head: '#ffe27d', body: '#d4a017', cost: 50 },
+  { name: 'ice', head: '#b3ecff', body: '#2aa8d4', cost: 150 },
+  { name: 'grape', head: '#d3a6ff', body: '#7d3fd4', cost: 300 },
+  { name: 'lava', head: '#ff9a7d', body: '#d43a2a', cost: 500 }
+];
+
+var state = 'menu'; // menu | shop | play | pause | over
+var snake, dir, pending, apple, score, best, level, eaten, banked, skin;
 
 best = parseInt(localStorage.getItem('tagless-high') || '0', 10);
 if (isNaN(best)) best = 0;
+banked = parseInt(localStorage.getItem('tagless-bank') || '0', 10);
+if (isNaN(banked)) banked = 0;
+skin = parseInt(localStorage.getItem('tagless-skin') || '0', 10);
+if (isNaN(skin) || skin < 0 || skin >= skins.length) skin = 0;
+var shopAt = skin;
 
 function reset() {
   snake = [{ x: 9, y: 10 }, { x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }];
@@ -73,7 +86,8 @@ function step() {
   snake.unshift(head);
 
   if (head.x === apple.x && head.y === apple.y) {
-    score++; eaten++;
+    score++; eaten++; banked++;
+    localStorage.setItem('tagless-bank', String(banked));
     level = Math.floor(eaten / 5) + 1;
     placeApple();
   } else {
@@ -89,24 +103,28 @@ function die() {
   }
 }
 
+function unlocked(i) {
+  return banked >= skins[i].cost;
+}
+
 function draw() {
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // apple
+  if (state === 'shop') { drawShop(); return; }
+
   ctx.fillStyle = '#e5484d';
   ctx.fillRect(apple.x * CELL, apple.y * CELL, CELL, CELL);
   ctx.font = '18px Arial';
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText('🍎', apple.x * CELL + 10, apple.y * CELL + 11);
 
-  // snake
-  ctx.fillStyle = '#0f0';
+  var sk = skins[skin];
   for (var i = 0; i < snake.length; i++) {
+    ctx.fillStyle = i === 0 ? sk.head : sk.body;
     ctx.fillRect(snake[i].x * CELL, snake[i].y * CELL, CELL - 1, CELL - 1);
   }
 
-  // score
   ctx.fillStyle = '#fff';
   ctx.font = '15px Arial';
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
@@ -115,21 +133,42 @@ function draw() {
   ctx.textAlign = 'right';
   ctx.fillText('level ' + level, canvas.width - 8, 8);
 
-  if (state === 'ready') {
+  if (state === 'menu') {
     shadow();
-    big('snake', 150);
-    small('arrows / wasd or swipe', 220);
-    small('space pauses - press space or tap to start', 246);
+    big('snake', 130);
+    small('best ' + best + '   apples ' + banked, 190);
+    small('space - play', 240);
+    small('s - skins', 264);
   } else if (state === 'pause') {
     shadow();
     big('paused', 180);
     small('space to keep playing', 230);
   } else if (state === 'over') {
     shadow();
-    big('game over', 160);
-    small('score ' + score + '   best ' + best, 220);
-    small('space or tap to play again', 250);
+    big('game over', 150);
+    small('score ' + score + '   best ' + best, 210);
+    small('apples banked ' + banked, 234);
+    small('space to play again - s for skins', 262);
   }
+}
+
+function drawShop() {
+  shadow();
+  big('skins', 70);
+  small('apples banked ' + banked, 110);
+
+  var sk = skins[shopAt];
+  for (var i = 0; i < 5; i++) {
+    ctx.fillStyle = i === 0 ? sk.head : sk.body;
+    ctx.fillRect(110 + i * 36, 170, 34, 34);
+  }
+  big(sk.name, 250);
+  if (unlocked(shopAt)) {
+    small(shopAt === skin ? 'wearing it' : 'space to wear', 282);
+  } else {
+    small('locked - ' + (sk.cost - banked) + ' more apples', 282);
+  }
+  small('arrows browse - space pick - s back', 320);
 }
 
 function shadow() {
@@ -154,6 +193,17 @@ function small(t, y) {
 function start() {
   reset();
   state = 'play';
+}
+
+function openShop() {
+  shopAt = skin;
+  state = 'shop';
+}
+
+function pickSkin() {
+  if (!unlocked(shopAt)) return;
+  skin = shopAt;
+  localStorage.setItem('tagless-skin', String(skin));
 }
 
 var last = 0, acc = 0;
@@ -182,6 +232,17 @@ document.addEventListener('keydown', function (e) {
   if (k === 'ArrowUp' || k === 'ArrowDown' || k === 'ArrowLeft' || k === 'ArrowRight' || k === ' ') {
     e.preventDefault();
   }
+  if (state === 'shop') {
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') shopAt = (shopAt + skins.length - 1) % skins.length;
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') shopAt = (shopAt + 1) % skins.length;
+    else if (k === ' ' || k === 'Enter') { pickSkin(); state = 'menu'; }
+    else if (k === 's' || k === 'S' || k === 'Escape') state = 'menu';
+    return;
+  }
+  if ((k === 's' || k === 'S') && (state === 'menu' || state === 'over')) {
+    openShop();
+    return;
+  }
   if (k === ' ') {
     if (state === 'play') state = 'pause';
     else if (state === 'pause') state = 'play';
@@ -194,6 +255,28 @@ document.addEventListener('keydown', function (e) {
   else if (k === 'ArrowLeft' || k === 'a' || k === 'A') steer(-1, 0);
   else if (k === 'ArrowRight' || k === 'd' || k === 'D') steer(1, 0);
 });
+
+function tapPos(cx, cy) {
+  var r = canvas.getBoundingClientRect();
+  return { x: (cx - r.left) / r.width * canvas.width, y: (cy - r.top) / r.height * canvas.height };
+}
+
+function tap(x, y) {
+  if (state === 'menu') {
+    if (y < 120) openShop();
+    else start();
+  } else if (state === 'shop') {
+    if (x < canvas.width / 3) shopAt = (shopAt + skins.length - 1) % skins.length;
+    else if (x > canvas.width * 2 / 3) shopAt = (shopAt + 1) % skins.length;
+    else { pickSkin(); state = 'menu'; }
+  } else if (state === 'over') {
+    start();
+  } else if (state === 'play') {
+    state = 'pause';
+  } else if (state === 'pause') {
+    state = 'play';
+  }
+}
 
 var tsx = 0, tsy = 0, tstid = null, tst = 0, moved = false;
 canvas.addEventListener('touchstart', function (e) {
@@ -208,6 +291,11 @@ canvas.addEventListener('touchmove', function (e) {
     if (t.identifier !== tstid) continue;
     var dx = t.clientX - tsx, dy = t.clientY - tsy;
     if (Math.abs(dx) < 24 && Math.abs(dy) < 24) continue;
+    if (state === 'shop') {
+      shopAt = (shopAt + (dx > 0 ? 1 : skins.length - 1)) % skins.length;
+      tsx = t.clientX; tsy = t.clientY; moved = true;
+      continue;
+    }
     if (Math.abs(dx) > Math.abs(dy)) steer(dx > 0 ? 1 : -1, 0);
     else steer(0, dy > 0 ? 1 : -1);
     tsx = t.clientX; tsy = t.clientY; moved = true;
@@ -216,17 +304,19 @@ canvas.addEventListener('touchmove', function (e) {
 canvas.addEventListener('touchend', function (e) {
   e.preventDefault();
   if (!moved && Date.now() - tst < 300) {
-    if (state !== 'play') start();
-    else state = 'pause';
+    var t = e.changedTouches[0];
+    var p = tapPos(t.clientX, t.clientY);
+    tap(p.x, p.y);
   }
   tstid = null;
 }, { passive: false });
-canvas.addEventListener('mousedown', function () {
-  if (state !== 'play') start();
+canvas.addEventListener('mousedown', function (e) {
+  var p = tapPos(e.clientX, e.clientY);
+  tap(p.x, p.y);
 });
 
 reset();
-state = 'ready';
+state = 'menu';
 requestAnimationFrame(loop);
 </script>
 </body>
